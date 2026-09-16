@@ -1243,6 +1243,20 @@
       const [consistencyType, setConsistencyType] = useState("bar"); // "bar" or "line"
       const [heatmapMonth, setHeatmapMonth] = useState(new Date());
 
+      // --- 9 Month Target Logic ---
+      const TARGET_START = useMemo(() => new Date(2026, 8, 7), []); // Month 8 is Sept
+      const TARGET_END = useMemo(() => new Date(2027, 5, 7), []);   // Month 5 is June
+      const totalTargetDays = useMemo(() => daysDiff(TARGET_END, TARGET_START), [TARGET_START, TARGET_END]);
+      
+      const cleanDaysInTarget = useMemo(() => {
+        const startKey = toKey(TARGET_START);
+        const endKey = toKey(TARGET_END);
+        return transactions.filter(t => t.date >= startKey && t.date <= endKey && t.stayedPure).length;
+      }, [transactions, TARGET_START, TARGET_END]);
+
+      const targetPct = totalTargetDays > 0 ? Math.min(100, Math.floor((cleanDaysInTarget / totalTargetDays) * 100)) : 0;
+      // ----------------------------
+
       const filtered = useMemo(() => {
         if (range === 0) return transactions;
         const cutoff = toKey(addDays(new Date(), -range));
@@ -1283,6 +1297,36 @@
         <div style={{ padding: "24px 20px" }}>
           <h1 className="serif" style={{ fontSize: 23, margin: "0 0 4px" }}>Your patterns</h1>
           <p style={{ fontSize: 12.5, color: C.sandDim, margin: "0 0 18px" }}>Not a scoreboard — a mirror, so you can plan around it.</p>
+
+          {/* --- 9-Month Target Mission Progress --- */}
+          <div className="slideUp" style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 16, padding: "18px 16px", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: `0 4px 14px ${C.bg}` }}>
+            <div style={{ flex: 1, paddingRight: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <Sparkles size={14} color={C.gold} />
+                <span style={{ fontSize: 11.5, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", fontWeight: 800 }}>9-Month Mission</span>
+              </div>
+              <div style={{ fontSize: 12.5, color: C.sandDim, lineHeight: 1.4, marginBottom: 8 }}>
+                Sept 7, 2026 — June 7, 2027
+              </div>
+              <div style={{ fontSize: 12, color: C.sand }}>
+                <strong style={{ color: C.sage, fontSize: 14 }}>{cleanDaysInTarget}</strong> pure days of <strong>{totalTargetDays}</strong>
+              </div>
+            </div>
+            
+            <div style={{ position: "relative", width: 76, height: 76, display: "grid", placeItems: "center", flexShrink: 0 }}>
+              <svg width="76" height="76" style={{ transform: "rotate(-90deg)", position: "absolute" }}>
+                <circle cx="38" cy="38" r="32" fill="transparent" stroke={C.bg2} strokeWidth="7" />
+                <circle cx="38" cy="38" r="32" fill="transparent" stroke={C.gold} strokeWidth="7" 
+                  strokeDasharray={2 * Math.PI * 32} 
+                  strokeDashoffset={(2 * Math.PI * 32) - ((targetPct / 100) * (2 * Math.PI * 32))} 
+                  strokeLinecap="round"
+                  style={{ transition: "stroke-dashoffset 1.2s cubic-bezier(0.16, 1, 0.3, 1)" }}
+                />
+              </svg>
+              <span style={{ fontSize: 16, fontWeight: 800, color: C.sand }}>{targetPct}%</span>
+            </div>
+          </div>
+          {/* -------------------------------------- */}
 
           <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
             {[{ l: "7D", v: 7 }, { l: "30D", v: 30 }, { l: "90D", v: 90 }, { l: "All", v: 0 }].map((r) => (
