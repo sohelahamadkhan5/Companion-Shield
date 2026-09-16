@@ -7,7 +7,7 @@
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- React 18 & ReactDOM UMD -->
@@ -23,17 +23,44 @@
       color: #EAE3D3;
       font-family: 'Manrope', ui-sans-serif, system-ui, -apple-system, sans-serif;
       overflow-x: hidden;
+      user-select: none;
     }
     .serif { font-family: 'Fraunces', Georgia, serif; }
+    .retro-mono { font-family: 'JetBrains Mono', 'Courier New', Courier, monospace; }
+
+    /* Retro Marquee & Ticker */
+    @keyframes retroMarquee {
+      0% { transform: translateX(0%); }
+      100% { transform: translateX(-50%); }
+    }
+    .retro-ticker-track {
+      display: flex;
+      width: max-content;
+      animation: retroMarquee 42s linear infinite;
+    }
+    .retro-ticker-track:hover, .retro-ticker-track:active {
+      animation-play-state: paused;
+    }
+    .scanlines {
+      background: linear-gradient(
+        to bottom,
+        rgba(255,255,255,0),
+        rgba(255,255,255,0) 50%,
+        rgba(0, 0, 0, 0.28) 51%,
+        rgba(0, 0, 0, 0.28)
+      );
+      background-size: 100% 4px;
+    }
+
     @keyframes breathe {
-      0%   { transform: scale(0.94); opacity: 0.55; }
+      0%   { transform: scale(0.92); opacity: 0.50; }
       50%  { transform: scale(1.08); opacity: 0.95; }
-      100% { transform: scale(0.94); opacity: 0.55; }
+      100% { transform: scale(0.92); opacity: 0.50; }
     }
     @keyframes breatheSlow {
-      0%   { transform: scale(0.9); }
+      0%   { transform: scale(0.88); }
       50%  { transform: scale(1.05); }
-      100% { transform: scale(0.9); }
+      100% { transform: scale(0.88); }
     }
     @keyframes fadeSlide {
       from { opacity: 0; transform: translateY(6px); }
@@ -41,14 +68,14 @@
     }
     @keyframes twinkle {
       0%, 100% { opacity: 0.25; }
-      50% { opacity: 0.9; }
+      50% { opacity: 0.95; }
     }
     @keyframes slideUp {
-      from { opacity: 0; transform: translateY(16px); }
+      from { opacity: 0; transform: translateY(18px); }
       to   { opacity: 1; transform: translateY(0); }
     }
-    .fadeIn { animation: fadeSlide 0.6s ease both; }
-    .slideUp { animation: slideUp 0.45s ease both; }
+    .fadeIn { animation: fadeSlide 0.5s ease both; }
+    .slideUp { animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
     ::-webkit-scrollbar { width: 0; height: 0; }
     button { font-family: inherit; }
   </style>
@@ -59,6 +86,148 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo, useRef } = React;
 
+    // --- Calming Web Audio Synthesizer (Zero External Dependencies) ---
+    let audioCtx = null;
+    function getAudioContext() {
+      if (!audioCtx) {
+        const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtxClass) {
+          audioCtx = new AudioCtxClass();
+        }
+      }
+      if (audioCtx && audioCtx.state === "suspended") {
+        audioCtx.resume();
+      }
+      return audioCtx;
+    }
+
+    function playUIFeedback(type, soundEnabled = true) {
+      if (!soundEnabled) return;
+      try {
+        const ctx = getAudioContext();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        if (type === "nav") {
+          // Soft grounding marimba knock (Low freq, fast decay - calming)
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(320, now);
+          osc.frequency.exponentialRampToValueAtTime(150, now + 0.1);
+          gain.gain.setValueAtTime(0, now);
+          gain.gain.linearRampToValueAtTime(0.05, now + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+          osc.start(now);
+          osc.stop(now + 0.16);
+        } else if (type === "urge") {
+          // Deep anchoring bowl (136.1Hz Om frequency)
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(136.1, now);
+          gain.gain.setValueAtTime(0, now);
+          gain.gain.linearRampToValueAtTime(0.08, now + 0.1);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
+          
+          const osc2 = ctx.createOscillator();
+          osc2.type = "sine";
+          osc2.frequency.value = 136.1 * 2; // harmonic
+          const g2 = ctx.createGain();
+          g2.gain.setValueAtTime(0, now);
+          g2.gain.linearRampToValueAtTime(0.02, now + 0.1);
+          g2.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+          osc2.connect(g2);
+          g2.connect(ctx.destination);
+          
+          osc.start(now); osc.stop(now + 2.1);
+          osc2.start(now); osc2.stop(now + 1.6);
+        } else if (type === "save_positive") {
+          // Victorious shimmer (C Major arpeggio - dopamine reinforcing)
+          const freqs = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+          freqs.forEach((f, i) => {
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = "triangle";
+            o.frequency.value = f;
+            o.connect(g);
+            g.connect(ctx.destination);
+            const t = now + (i * 0.08);
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(0.05, t + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+            o.start(t);
+            o.stop(t + 0.8);
+          });
+          gain.disconnect(); // Cancel base osc since we made individual ones
+        } else if (type === "save_negative") {
+          // Compassionate, soft descending hum (Non-punishing to avoid shame)
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(220, now); // A3
+          osc.frequency.exponentialRampToValueAtTime(180, now + 0.5);
+          gain.gain.setValueAtTime(0, now);
+          gain.gain.linearRampToValueAtTime(0.04, now + 0.1);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+          osc.start(now);
+          osc.stop(now + 0.75);
+        } else if (type === "toggle") {
+          // Soft organic glass tick (unobtrusive UI feedback)
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(600, now);
+          gain.gain.setValueAtTime(0, now);
+          gain.gain.linearRampToValueAtTime(0.02, now + 0.005);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+          osc.start(now);
+          osc.stop(now + 0.06);
+        }
+      } catch(e) {}
+    }
+
+    function playSoftClick(soundEnabled = true) {
+      // Fallback for standard UI clicks (charts, fields, settings)
+      playUIFeedback("toggle", soundEnabled);
+    }
+
+    function playBreathTone(phase, soundEnabled = true) {
+      if (!soundEnabled) return;
+      try {
+        const ctx = getAudioContext();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+
+        if (phase === "Breathe in") {
+          // Ascending harmonic frequency (174Hz to 240Hz)
+          osc.frequency.setValueAtTime(174, now);
+          osc.frequency.exponentialRampToValueAtTime(240, now + 3.8);
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.065, now + 1.6);
+          gain.gain.linearRampToValueAtTime(0.03, now + 3.8);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 4.0);
+        } else if (phase === "Breathe out") {
+          // Grounding descending frequency (240Hz down to 136.1Hz - heart / Om)
+          osc.frequency.setValueAtTime(240, now);
+          osc.frequency.exponentialRampToValueAtTime(136.1, now + 3.8);
+          gain.gain.setValueAtTime(0.05, now);
+          gain.gain.linearRampToValueAtTime(0.025, now + 2.0);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 4.0);
+        } else {
+          // Hold phase: serene soft chime
+          osc.frequency.setValueAtTime(216, now);
+          gain.gain.setValueAtTime(0.035, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 3.6);
+        }
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 4.0);
+      } catch(e) {}
+    }
+
+    // --- Color Palette (Electric Azure replaces invisible grey) ---
     const C = {
       bg: "#0B1F26",
       bg2: "#0F2730",
@@ -69,15 +238,18 @@
       sandDim: "#AEC0BE",
       gold: "#D8B26E",
       goldSoft: "#D8B26E22",
-      sage: "#6FA98F",
-      rust: "#C77B5A",
+      sage: "#4ADE80",       // High-visibility, calming Emerald Sage
+      sky: "#38BDF8",        // Radiant Electric Azure (Replaces dull invisible grey)
+      amber: "#FBBF24",      // Radiant Soothing Amber
+      rust: "#F87171",       // Soft Coral Terracotta
       slate: "#7E97A0",
     };
 
+    // --- Crisp SVG Icons ---
     const Settings = ({ size = 16, color = "currentColor", ...p }) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
-        <circle cx="12" cy="12" r="3"/>
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
       </svg>
     );
 
@@ -99,183 +271,151 @@
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
         <polyline points="3 6 5 6 21 6"></polyline>
         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-        <line x1="10" y1="11" x2="10" y2="17"></line>
-        <line x1="14" y1="11" x2="14" y2="17"></line>
       </svg>
     );
 
     const Flame = ({ size = 16, color = "currentColor", ...p }) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-        <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+        <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>
       </svg>
     );
 
     const Trophy = ({ size = 16, color = "currentColor", ...p }) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-        <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
-        <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
-        <path d="M4 22h16"/>
-        <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
-        <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
-        <path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/>
+        <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+        <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+        <path d="M4 22h16"></path>
+        <path d="M10 14.66V17c0 .55-.45 1-1 1H7v2h10v-2h-2c-.55 0-1-.45-1-1v-2.34"></path>
+        <path d="M6 4h12a2 2 0 0 1 2 2v3a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6V6a2 2 0 0 1 2-2z"></path>
       </svg>
     );
 
     const Shield = ({ size = 16, color = "currentColor", ...p }) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
       </svg>
     );
 
     const Wind = ({ size = 16, color = "currentColor", ...p }) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-        <path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/>
-        <path d="M9.6 4.6A2 2 0 1 1 11 8H2"/>
-        <path d="M12.6 19.4A2 2 0 1 0 14 16H2"/>
+        <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"></path>
       </svg>
     );
 
     const Sun = ({ size = 16, color = "currentColor", ...p }) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-        <circle cx="12" cy="12" r="4"/>
-        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
       </svg>
     );
 
     const Moon = ({ size = 16, color = "currentColor", ...p }) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-        <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
       </svg>
     );
 
     const Sparkles = ({ size = 16, color = "currentColor", ...p }) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-        <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
-        <path d="M5 3v4M3 5h4M19 17v4M17 19h4"/>
+        <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"></path>
       </svg>
     );
 
     const PenLine = ({ size = 16, color = "currentColor", ...p }) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-        <path d="M12 20h9"/>
-        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+        <path d="M12 20h9"></path>
+        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
       </svg>
     );
 
     const BarChart3 = ({ size = 16, color = "currentColor", ...p }) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-        <path d="M3 3v18h18"/>
-        <path d="M18 17V9"/>
-        <path d="M13 17V5"/>
-        <path d="M8 17v-3"/>
+        <line x1="18" y1="20" x2="18" y2="10"></line>
+        <line x1="12" y1="20" x2="12" y2="4"></line>
+        <line x1="6" y1="20" x2="6" y2="14"></line>
       </svg>
     );
 
     const Compass = ({ size = 16, color = "currentColor", ...p }) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-        <circle cx="12" cy="12" r="10"/>
-        <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
-      </svg>
-    );
-
-    const Cloud = ({ size = 16, color = "currentColor", ...p }) => (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-        <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
-      </svg>
-    );
-
-    const RefreshCw = ({ size = 16, color = "currentColor", className = "", ...p }) => (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...p}>
-        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-        <path d="M21 3v5h-5"/>
-        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-        <path d="M3 21v-5h5"/>
+        <circle cx="12" cy="12" r="10"></circle>
+        <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
       </svg>
     );
 
     const Check = ({ size = 16, color = "currentColor", ...p }) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-        <polyline points="20 6 9 17 4 12"/>
+        <polyline points="20 6 9 17 4 12"></polyline>
       </svg>
     );
 
+    const ChevronLeft = ({ size = 16, color = "currentColor", ...p }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+        <polyline points="15 18 9 12 15 6"></polyline>
+      </svg>
+    );
+
+    const ChevronRight = ({ size = 16, color = "currentColor", ...p }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+        <polyline points="9 18 15 12 9 6"></polyline>
+      </svg>
+    );
+
+    const Volume2 = ({ size = 16, color = "currentColor", ...p }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+      </svg>
+    );
+
+    const VolumeX = ({ size = 16, color = "currentColor", ...p }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+        <line x1="23" y1="9" x2="17" y2="15"></line>
+        <line x1="17" y1="9" x2="23" y2="15"></line>
+      </svg>
+    );
+
+    const Cloud = ({ size = 16, color = "currentColor", ...p }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+        <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path>
+      </svg>
+    );
+
+    const RefreshCw = ({ size = 16, color = "currentColor", ...p }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+        <path d="M21 2v6h-6"></path>
+        <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+        <path d="M3 22v-6h6"></path>
+        <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+      </svg>
+    );
+
+    // --- High-Contrast Feelings Config (No dull grey) ---
     const FEELINGS = [
-      { key: "Positive", label: "Positive", color: C.sage, Icon: Sun },
-      { key: "Neutral", label: "Neutral", color: C.slate, Icon: Moon },
-      { key: "Negative", label: "Negative", color: C.rust, Icon: Compass },
-      { key: "Urge", label: "A little urge — controlled", color: C.gold, Icon: Wind },
+      { key: "Positive", label: "Positive", color: C.sage, Icon: Sun, score: 3 },
+      { key: "Neutral", label: "Neutral / Calm", color: C.sky, Icon: Moon, score: 2 },
+      { key: "Urge", label: "Urge controlled", color: C.amber, Icon: Wind, score: 1 },
+      { key: "Negative", label: "Struggling", color: C.rust, Icon: Compass, score: 0 },
     ];
 
-    // Single core Why from Companion101 sheet
     const DEFAULT_WHYS = [
       "Because I don't want a moment of weakness to distance me from Allah and burden my heart with guilt and regret.",
+      "Because when life gets hard, I need myself at my strongest — not weakened by my own choices.",
+      "Because I don't want to lose the confidence and strength I've worked so hard to build within myself."
     ];
 
     const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx1jPac8drSw4oyARsX0PbxSlK8LR_AMll-DQik5ZnGBfOOoG6YIEfnxwBpypdLXhmVZg/exec";
 
-    const APPS_SCRIPT_TEMPLATE = `function doGet() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  
-  // 1. Read Whys (Sheet2 or first sheet)
-  let whys = [];
-  const whysSheet = ss.getSheetByName("Sheet2") || ss.getSheetByName("Whys") || ss.getSheets()[1];
-  if (whysSheet) {
-    const data = whysSheet.getDataRange().getValues();
-    whys = data.flat().filter(r => r && String(r).trim().length > 0 && !["why", "whys", "reason"].includes(String(r).toLowerCase()));
-  }
-
-  // 2. Read Daily Check-ins (Sheet1 or first sheet)
-  let logs = [];
-  const logSheet = ss.getSheetByName("Sheet1") || ss.getSheetByName("Logs") || ss.getSheets()[0];
-  if (logSheet) {
-    const rows = logSheet.getDataRange().getValues();
-    if (rows.length > 1) {
-      for (let i = 1; i < rows.length; i++) {
-        const [d, pure, gaze, feeling] = rows[i];
-        if (d) {
-          const dateStr = d instanceof Date ? Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd") : String(d).slice(0, 10);
-          logs.push({
-            date: dateStr,
-            stayedPure: pure === true || String(pure).toLowerCase() === "yes" || pure === 1,
-            gazeGuarded: gaze === true || String(gaze).toLowerCase() === "yes" || gaze === 1,
-            feeling: feeling || "Positive"
-          });
-        }
-      }
-    }
-  }
-
-  return ContentService.createTextOutput(JSON.stringify({ whys: whys.length ? whys : null, logs }))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function doPost(e) {
-  try {
-    const data = JSON.parse(e.postData.contents);
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const logSheet = ss.getSheetByName("Sheet1") || ss.getSheetByName("Logs") || ss.getSheets()[0];
-    
-    // Check if row for this date already exists to update or append
-    const rows = logSheet.getDataRange().getValues();
-    let updated = false;
-    for (let i = 1; i < rows.length; i++) {
-      const d = rows[i][0];
-      const dStr = d instanceof Date ? Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd") : String(d).slice(0, 10);
-      if (dStr === data.date) {
-        logSheet.getRange(i + 1, 1, 1, 4).setValues([[data.date, data.stayedPure ? "Yes" : "No", data.gazeGuarded ? "Yes" : "No", data.feeling]]);
-        updated = true;
-        break;
-      }
-    }
-    if (!updated) {
-      logSheet.appendRow([data.date, data.stayedPure ? "Yes" : "No", data.gazeGuarded ? "Yes" : "No", data.feeling]);
-    }
-    return ContentService.createTextOutput(JSON.stringify({ status: "success" })).setMimeType(ContentService.MimeType.JSON);
-  } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ status: "error", error: err.message })).setMimeType(ContentService.MimeType.JSON);
-  }
-}`;
-
+    // --- Date Helpers ---
     function toKey(d) {
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -320,6 +460,13 @@ function doPost(e) {
       const [settingsOpen, setSettingsOpen] = useState(false);
       const [urgeMode, setUrgeMode] = useState(false);
       const [prefillUrge, setPrefillUrge] = useState(false);
+      const [soundEnabled, setSoundEnabled] = useState(true);
+
+      // New state to manage the Why display style
+      const [whyStyle, setWhyStyle] = useState(() => {
+        try { return localStorage.getItem("companion_why_style") || "focus"; }
+        catch (e) { return "focus"; }
+      });
 
       const [sheetUrl, setSheetUrl] = useState(() => {
         try {
@@ -359,7 +506,7 @@ function doPost(e) {
         }
       };
 
-      // Auto-sync on initial mount if a sheet URL is configured
+      // Auto-sync on startup
       useEffect(() => {
         if (sheetUrl) {
           syncWithSheet(sheetUrl);
@@ -389,6 +536,17 @@ function doPost(e) {
         }
       };
 
+      const triggerNav = (newTab) => {
+        playUIFeedback("nav", soundEnabled);
+        setTab(newTab);
+      };
+
+      const handleSetWhyStyle = (style) => {
+        playSoftClick(soundEnabled);
+        setWhyStyle(style);
+        try { localStorage.setItem("companion_why_style", style); } catch (e) {}
+      };
+
       return (
         <div style={{ background: C.bg, minHeight: "100vh", color: C.sand, fontFamily: "'Manrope', ui-sans-serif, system-ui" }}>
           <div style={{ maxWidth: 460, margin: "0 auto", minHeight: "100vh", position: "relative", paddingBottom: 84 }}>
@@ -396,12 +554,16 @@ function doPost(e) {
               <HomeScreen
                 whys={whys}
                 transactions={transactions}
-                onOpenSettings={() => setSettingsOpen(true)}
-                onUrge={() => setUrgeMode(true)}
+                onOpenSettings={() => { playUIFeedback("toggle", soundEnabled); setSettingsOpen(true); }}
+                onUrge={() => { playUIFeedback("urge", soundEnabled); setUrgeMode(true); }}
                 sheetConnected={!!sheetUrl}
                 isSyncing={isSyncing}
                 syncMessage={syncMessage}
                 onTriggerSync={() => syncWithSheet()}
+                soundEnabled={soundEnabled}
+                onToggleSound={() => setSoundEnabled(v => !v)}
+                whyStyle={whyStyle}
+                onSetWhyStyle={handleSetWhyStyle}
               />
             )}
             {tab === "log" && (
@@ -412,28 +574,36 @@ function doPost(e) {
                 clearPrefill={() => setPrefillUrge(false)}
                 onSaveToSheet={saveEntryToSheet}
                 sheetConnected={!!sheetUrl}
+                soundEnabled={soundEnabled}
               />
             )}
-            {tab === "dashboard" && <DashboardScreen transactions={transactions} />}
+            {tab === "dashboard" && (
+              <DashboardScreen 
+                transactions={transactions}
+                soundEnabled={soundEnabled} 
+              />
+            )}
 
-            <BottomNav tab={tab} setTab={setTab} />
+            <BottomNav tab={tab} setTab={triggerNav} />
 
             {settingsOpen && (
               <WhysSettings
                 whys={whys}
                 setWhys={setWhys}
-                onClose={() => setSettingsOpen(false)}
+                onClose={() => { playUIFeedback("toggle", soundEnabled); setSettingsOpen(false); }}
                 sheetUrl={sheetUrl}
                 onUpdateSheetUrl={handleUpdateSheetUrl}
                 onSyncNow={() => syncWithSheet()}
                 isSyncing={isSyncing}
+                soundEnabled={soundEnabled}
               />
             )}
             {urgeMode && (
               <UrgeOverlay
                 whys={whys}
-                onClose={() => setUrgeMode(false)}
-                onLog={() => { setUrgeMode(false); setPrefillUrge(true); setTab("log"); }}
+                onClose={() => { playUIFeedback("toggle", soundEnabled); setUrgeMode(false); }}
+                onLog={() => { playUIFeedback("nav", soundEnabled); setUrgeMode(false); setPrefillUrge(true); setTab("log"); }}
+                soundEnabled={soundEnabled}
               />
             )}
           </div>
@@ -441,20 +611,23 @@ function doPost(e) {
       );
     }
 
-    function HomeScreen({ whys, transactions, onOpenSettings, onUrge, sheetConnected, isSyncing, syncMessage, onTriggerSync }) {
+    function HomeScreen({ whys, transactions, onOpenSettings, onUrge, sheetConnected, isSyncing, syncMessage, onTriggerSync, soundEnabled, onToggleSound, whyStyle, onSetWhyStyle }) {
+      const streak = useMemo(() => computeCurrentStreak(transactions), [transactions]);
+      
+      // For the Focus (Breathe) Carousel Style
       const [idx, setIdx] = useState(0);
       const timerRef = useRef(null);
 
       useEffect(() => {
-        if (whys.length <= 1) {
-          setIdx(0);
+        if (whyStyle !== "focus" || whys.length <= 1) {
+          clearInterval(timerRef.current);
           return;
         }
         timerRef.current = setInterval(() => setIdx((i) => (i + 1) % whys.length), 6500);
         return () => clearInterval(timerRef.current);
-      }, [whys.length]);
+      }, [whys.length, whyStyle]);
 
-      const streak = useMemo(() => computeCurrentStreak(transactions), [transactions]);
+      const currentWhy = whys[idx] || whys[0] || DEFAULT_WHYS[0];
 
       return (
         <div>
@@ -488,22 +661,41 @@ function doPost(e) {
                   </button>
                 )}
               </div>
-              <button
-                onClick={onOpenSettings}
-                aria-label="Settings"
-                style={{
-                  background: C.panel,
-                  border: `1px solid ${C.hair}`,
-                  borderRadius: 99,
-                  width: 38,
-                  height: 38,
-                  display: "grid",
-                  placeItems: "center",
-                  cursor: "pointer"
-                }}
-              >
-                <Settings size={17} color={C.sandDim} />
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button
+                  onClick={onToggleSound}
+                  aria-label={soundEnabled ? "Mute audio" : "Enable calming audio"}
+                  title={soundEnabled ? "Sound ON (Click to mute)" : "Sound OFF (Click to unmute)"}
+                  style={{
+                    background: C.panel,
+                    border: `1px solid ${soundEnabled ? C.gold : C.hair}`,
+                    borderRadius: 99,
+                    width: 36,
+                    height: 36,
+                    display: "grid",
+                    placeItems: "center",
+                    cursor: "pointer"
+                  }}
+                >
+                  {soundEnabled ? <Volume2 size={16} color={C.gold} /> : <VolumeX size={16} color={C.sandDim} />}
+                </button>
+                <button
+                  onClick={onOpenSettings}
+                  aria-label="Settings"
+                  style={{
+                    background: C.panel,
+                    border: `1px solid ${C.hair}`,
+                    borderRadius: 99,
+                    width: 36,
+                    height: 36,
+                    display: "grid",
+                    placeItems: "center",
+                    cursor: "pointer"
+                  }}
+                >
+                  <Settings size={16} color={C.sandDim} />
+                </button>
+              </div>
             </div>
 
             {syncMessage && (
@@ -532,50 +724,146 @@ function doPost(e) {
             )}
           </div>
 
-          {/* Breathing why card */}
-          <div style={{ position: "relative", padding: "34px 24px 10px", display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <div style={{ position: "relative", width: 240, height: 240, display: "grid", placeItems: "center", marginBottom: 26 }}>
+          {/* Style Switcher */}
+          <div style={{ display: "flex", justifyContent: "center", padding: "10px 20px 0" }}>
+            <div style={{ display: "flex", background: C.panel, padding: 3, borderRadius: 12, border: `1px solid ${C.hair}` }}>
+              {[
+                { id: "focus", label: "Focus" },
+                { id: "retro", label: "Ticker" },
+                { id: "stack", label: "Cards" }
+              ].map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => onSetWhyStyle(s.id)}
+                  style={{
+                    padding: "6px 16px",
+                    borderRadius: 9,
+                    border: "none",
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    background: whyStyle === s.id ? C.gold : "transparent",
+                    color: whyStyle === s.id ? "#1a1204" : C.sandDim,
+                    cursor: "pointer",
+                    transition: "all 0.2s ease"
+                  }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Calming Core Display Area */}
+          <div style={{ position: "relative", padding: "20px 20px 10px", display: "flex", flexDirection: "column", alignItems: "center", minHeight: 270, justifyContent: "center" }}>
+            
+            {whyStyle === "focus" && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
+                <div style={{ position: "relative", width: 220, height: 220, display: "grid", placeItems: "center", marginBottom: 16 }}>
+                  <div style={{
+                    position: "absolute", inset: 0, borderRadius: "50%",
+                    background: `radial-gradient(circle, ${C.gold}33 0%, ${C.gold}0a 55%, transparent 75%)`,
+                    animation: "breathe 8s ease-in-out infinite"
+                  }} />
+                  <div style={{
+                    position: "absolute", width: 160, height: 160, borderRadius: "50%",
+                    border: `1px solid ${C.gold}40`, animation: "breatheSlow 8s ease-in-out infinite"
+                  }} />
+                  <div style={{ position: "relative", textAlign: "center", padding: "0 18px", zIndex: 2 }}>
+                    <div style={{ fontSize: 10, letterSpacing: 1.8, color: C.gold, marginBottom: 8, textTransform: "uppercase", fontWeight: 700 }}>
+                      Anchor
+                    </div>
+                    <div key={idx} className="fadeIn serif" style={{ fontSize: 15.5, lineHeight: 1.45, color: C.sand, textShadow: "0 2px 10px rgba(0,0,0,0.5)" }}>
+                      "{currentWhy}"
+                    </div>
+                  </div>
+                </div>
+
+                {whys.length > 1 && (
+                  <div style={{ display: "flex", gap: 6, marginBottom: 10, height: 10 }}>
+                    {whys.map((_, i) => (
+                      <button key={i} onClick={() => setIdx(i)} aria-label={`Why ${i + 1}`}
+                        style={{ width: i === idx ? 18 : 6, height: 6, borderRadius: 99, background: i === idx ? C.gold : C.hair, border: "none", transition: "width 0.3s", cursor: "pointer", padding: 0 }} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {whyStyle === "retro" && (
               <div style={{
-                position: "absolute", inset: 0, borderRadius: "50%",
-                background: `radial-gradient(circle, ${C.gold}33 0%, ${C.gold}0a 55%, transparent 75%)`,
-                animation: "breathe 8s ease-in-out infinite"
-              }} />
-              <div style={{
-                position: "absolute", width: 170, height: 170, borderRadius: "50%",
-                border: `1px solid ${C.gold}40`, animation: "breatheSlow 8s ease-in-out infinite"
-              }} />
-              <div style={{ position: "relative", textAlign: "center", padding: "0 14px" }}>
-                <div style={{ fontSize: 10, letterSpacing: 1.5, color: C.sandDim, marginBottom: 8 }}>my why</div>
-                <div key={idx} className="fadeIn serif" style={{ fontSize: 16.5, lineHeight: 1.45, color: C.sand, minHeight: 90 }}>
-                  {whys[idx] || whys[0]}
+                width: "100%",
+                background: "#08161B",
+                border: `1px solid ${C.hair}`,
+                borderRadius: 14,
+                overflow: "hidden",
+                position: "relative",
+                boxShadow: "inset 0 2px 6px rgba(0,0,0,0.4)"
+              }} className="scanlines">
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "6px 12px",
+                  background: "#061317",
+                  borderBottom: `1px solid ${C.hair}`,
+                  fontSize: 9.5,
+                  color: C.gold,
+                  letterSpacing: 1
+                }} className="retro-mono">
+                  <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.gold, animation: "twinkle 1.8s infinite" }} />
+                    RETRO TAPE RECORDER
+                  </span>
+                  <span style={{ color: C.sky }}>PAUSE ON HOVER</span>
+                </div>
+                <div style={{ overflow: "hidden", padding: "16px 0", cursor: "default" }}>
+                  <div className="retro-ticker-track">
+                    {[...whys, ...whys, ...whys].map((w, i) => (
+                      <div key={i} style={{ display: "inline-flex", alignItems: "center", gap: 14, paddingRight: 28 }}>
+                        <span className="retro-mono" style={{ fontSize: 10, color: C.gold, opacity: 0.8, padding: "2px 6px", background: `${C.gold}15`, borderRadius: 4 }}>
+                          #{String((i % whys.length) + 1).padStart(2, '0')}
+                        </span>
+                        <span className="serif" style={{ fontSize: 14.5, color: C.sand, whiteSpace: "nowrap", letterSpacing: 0.2 }}>
+                          {w}
+                        </span>
+                        <span style={{ color: C.hair, fontSize: 16 }}>✦</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            {whys.length > 1 && (
-              <div style={{ display: "flex", gap: 6, marginBottom: 22 }}>
-                {whys.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setIdx(i)}
-                    aria-label={`Why ${i + 1}`}
-                    style={{
-                      width: i === idx ? 18 : 6,
-                      height: 6,
-                      borderRadius: 99,
-                      background: i === idx ? C.gold : C.hair,
-                      border: "none",
-                      transition: "width 0.3s",
-                      cursor: "pointer"
-                    }}
-                  />
+            {whyStyle === "stack" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
+                {whys.map((w, i) => (
+                  <div key={i} className="slideUp" style={{
+                    animationDelay: `${i * 0.1}s`,
+                    background: C.panel,
+                    border: `1px solid ${C.hair}`,
+                    borderRadius: 14,
+                    padding: "16px",
+                    display: "flex",
+                    gap: 12,
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)"
+                  }}>
+                    <div style={{
+                      width: 24, height: 24, borderRadius: "50%", background: C.goldSoft, border: `1px solid ${C.gold}40`,
+                      display: "flex", alignItems: "center", justifyContent: "center", color: C.gold, fontSize: 10, fontWeight: 700, flexShrink: 0
+                    }}>
+                      {i + 1}
+                    </div>
+                    <div className="serif" style={{ fontSize: 14.5, color: C.sand, lineHeight: 1.5, marginTop: 1 }}>
+                      "{w}"
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
           </div>
 
           {/* Urge CTA */}
-          <div style={{ padding: "0 20px" }}>
+          <div style={{ padding: "16px 20px 0" }}>
             <button
               onClick={onUrge}
               style={{
@@ -597,12 +885,12 @@ function doPost(e) {
             >
               <Wind size={18} /> Feeling an urge right now
             </button>
-            <p style={{ textAlign: "center", fontSize: 12, color: C.sandDim, marginTop: 10, lineHeight: 1.5 }}>
+            <p style={{ textAlign: "center", fontSize: 12, color: C.sandDim, marginTop: 9, lineHeight: 1.5 }}>
               A wave rises and it falls. You only have to outlast it.
             </p>
           </div>
 
-          <div style={{ padding: "26px 20px 0" }}>
+          <div style={{ padding: "22px 20px 0" }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: C.sandDim, marginBottom: 8 }}>
               <span>Last 7 days</span>
             </div>
@@ -677,326 +965,19 @@ function doPost(e) {
       );
     }
 
-    function WhysSettings({ whys, setWhys, onClose, sheetUrl, onUpdateSheetUrl, onSyncNow, isSyncing }) {
-      const [text, setText] = useState("");
-      const [activeTab, setActiveTab] = useState("sheet"); // "sheet" or "whys"
-      const [scriptUrlInput, setScriptUrlInput] = useState(sheetUrl || "");
-      const [copiedCode, setCopiedCode] = useState(false);
-      const fileInputRef = useRef(null);
-
-      function handleFileUpload(e) {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-          const content = evt.target?.result;
-          if (typeof content !== "string") return;
-
-          const lines = content
-            .split(/\r?\n/)
-            .map((l) => l.trim().replace(/^["']|["']$/g, ""))
-            .filter((l) => l.length > 0);
-
-          const cleanLines = lines.filter(
-            (l) => !["why", "my why", "whys", "reason", "motivation", "reasons"].includes(l.toLowerCase())
-          );
-
-          if (cleanLines.length > 0) {
-            setWhys(cleanLines);
-          }
-        };
-        reader.readAsText(file);
-      }
-
-      function copyScriptCode() {
-        const textarea = document.createElement("textarea");
-        textarea.value = APPS_SCRIPT_TEMPLATE;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
-        setCopiedCode(true);
-        setTimeout(() => setCopiedCode(false), 2500);
-      }
-
-      return (
-        <Sheet onClose={onClose} title="Companion Data & Sheet">
-          <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-            <button
-              onClick={() => setActiveTab("sheet")}
-              style={{
-                flex: 1,
-                padding: "8px 0",
-                borderRadius: 10,
-                border: "none",
-                fontSize: 12.5,
-                fontWeight: 700,
-                background: activeTab === "sheet" ? C.gold : C.panel,
-                color: activeTab === "sheet" ? "#1a1204" : C.sandDim,
-                cursor: "pointer"
-              }}
-            >
-              Google Sheet DB
-            </button>
-            <button
-              onClick={() => setActiveTab("whys")}
-              style={{
-                flex: 1,
-                padding: "8px 0",
-                borderRadius: 10,
-                border: "none",
-                fontSize: 12.5,
-                fontWeight: 700,
-                background: activeTab === "whys" ? C.gold : C.panel,
-                color: activeTab === "whys" ? "#1a1204" : C.sandDim,
-                cursor: "pointer"
-              }}
-            >
-              My Whys ({whys.length})
-            </button>
-          </div>
-
-          {activeTab === "sheet" ? (
-            <div>
-              <p style={{ fontSize: 12.5, color: C.sandDim, lineHeight: 1.5, margin: "0 0 14px" }}>
-                Connect your Google Sheet directly to read your Whys and write your daily check-in logs automatically.
-              </p>
-
-              <div style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: 11, color: C.sandDim, display: "block", marginBottom: 6 }}>
-                  Google Apps Script Web App URL:
-                </label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input
-                    value={scriptUrlInput}
-                    onChange={(e) => setScriptUrlInput(e.target.value)}
-                    placeholder="https://script.google.com/macros/s/.../exec"
-                    style={{
-                      flex: 1,
-                      background: C.panel,
-                      border: `1px solid ${C.hair}`,
-                      borderRadius: 10,
-                      padding: "10px 12px",
-                      color: C.sand,
-                      fontSize: 12
-                    }}
-                  />
-                  <button
-                    onClick={() => onUpdateSheetUrl(scriptUrlInput)}
-                    style={{
-                      background: C.gold,
-                      color: "#1a1204",
-                      border: "none",
-                      borderRadius: 10,
-                      padding: "0 14px",
-                      fontWeight: 700,
-                      fontSize: 12,
-                      cursor: "pointer"
-                    }}
-                  >
-                    Save
-                  </button>
-                </div>
-              </div>
-
-              {sheetUrl && (
-                <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-                  <button
-                    onClick={onSyncNow}
-                    disabled={isSyncing}
-                    style={{
-                      flex: 1,
-                      background: `${C.sage}22`,
-                      border: `1px solid ${C.sage}`,
-                      color: C.sage,
-                      padding: "10px",
-                      borderRadius: 10,
-                      fontSize: 12.5,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 6
-                    }}
-                  >
-                    <RefreshCw size={13} color={C.sage} />
-                    {isSyncing ? "Syncing with Sheet…" : "Sync Now from Google Sheet"}
-                  </button>
-                  <button
-                    onClick={() => onUpdateSheetUrl("")}
-                    style={{
-                      background: "transparent",
-                      border: `1px solid ${C.hair}`,
-                      color: C.rust,
-                      padding: "10px 12px",
-                      borderRadius: 10,
-                      fontSize: 12,
-                      cursor: "pointer"
-                    }}
-                  >
-                    Disconnect
-                  </button>
-                </div>
-              )}
-
-              {/* Step-by-step setup guide */}
-              <div style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 12, padding: 14 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: C.sand }}>Setup instructions (2 minutes):</span>
-                  <button
-                    onClick={copyScriptCode}
-                    style={{
-                      background: copiedCode ? C.sage : C.gold,
-                      color: "#1a1204",
-                      border: "none",
-                      borderRadius: 6,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      padding: "4px 8px",
-                      cursor: "pointer"
-                    }}
-                  >
-                    {copiedCode ? "Copied code! ✓" : "Copy Google Script"}
-                  </button>
-                </div>
-                <ol style={{ margin: 0, paddingLeft: 18, fontSize: 11.5, color: C.sandDim, lineHeight: 1.6 }}>
-                  <li>Open your Google Sheet (with <b>Sheet1</b> for logs & <b>Sheet2</b> for Whys).</li>
-                  <li>Click <b>Extensions → Apps Script</b>.</li>
-                  <li>Paste the copied script code and click <b>Save (💾)</b>.</li>
-                  <li>Click <b>Deploy → New deployment</b>.</li>
-                  <li>Choose <b>Web app</b>, set <i>Who has access</i> to <b>Anyone</b>, and deploy.</li>
-                  <li>Copy the resulting Web App URL and paste it in the box above!</li>
-                </ol>
-              </div>
-
-              <div style={{ marginTop: 16 }}>
-                <span style={{ fontSize: 11, color: C.sandDim, display: "block", marginBottom: 8 }}>
-                  Or import directly from your offline CSV:
-                </span>
-                <input
-                  type="file"
-                  accept=".csv,.txt"
-                  ref={fileInputRef}
-                  onChange={handleFileUpload}
-                  style={{ display: "none" }}
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  style={{
-                    width: "100%",
-                    background: "transparent",
-                    border: `1px dashed ${C.hair}`,
-                    color: C.sandDim,
-                    padding: "9px 12px",
-                    borderRadius: 10,
-                    fontSize: 12,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 6,
-                  }}
-                >
-                  <Sparkles size={14} color={C.gold} />
-                  Import Companion101.csv file
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <p style={{ fontSize: 12.5, color: C.sandDim, lineHeight: 1.5, marginBottom: 14 }}>
-                These are the reasons shown on your home screen.
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 18 }}>
-                {whys.map((w, i) => (
-                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 12, padding: 12 }}>
-                    <p className="serif" style={{ flex: 1, fontSize: 13.5, lineHeight: 1.5, margin: 0, color: C.sand }}>{w}</p>
-                    <button onClick={() => setWhys(whys.filter((_, j) => j !== i))} style={{ background: "transparent", border: "none", padding: 4, cursor: "pointer" }} aria-label="Remove">
-                      <Trash2 size={15} color={C.rust} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  placeholder="Add a new why…"
-                  style={{
-                    flex: 1,
-                    background: C.bg2,
-                    border: `1px solid ${C.hair}`,
-                    borderRadius: 12,
-                    padding: "12px 14px",
-                    color: C.sand,
-                    fontSize: 13.5
-                  }}
-                />
-                <button
-                  onClick={() => {
-                    if (text.trim()) {
-                      setWhys([...whys, text.trim()]);
-                      setText("");
-                    }
-                  }}
-                  style={{
-                    background: C.gold,
-                    border: "none",
-                    borderRadius: 12,
-                    width: 44,
-                    display: "grid",
-                    placeItems: "center",
-                    cursor: "pointer"
-                  }}
-                >
-                  <Plus size={18} color="#1a1204" />
-                </button>
-              </div>
-            </div>
-          )}
-        </Sheet>
-      );
-    }
-
-    function Sheet({ onClose, title, children }) {
-      return (
-        <div style={{ position: "fixed", inset: 0, zIndex: 40, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "#00000088" }} />
-          <div className="slideUp" style={{
-            position: "relative", width: "100%", maxWidth: 460, maxHeight: "82vh", overflowY: "auto",
-            background: C.bg2, borderRadius: "22px 22px 0 0", padding: "18px 20px 28px", border: `1px solid ${C.hair}`
-          }}>
-            <div style={{ width: 36, height: 4, borderRadius: 99, background: C.hair, margin: "0 auto 16px" }} />
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <h2 className="serif" style={{ fontSize: 19, margin: 0, color: C.sand }}>{title}</h2>
-              <button
-                onClick={onClose}
-                style={{
-                  background: C.panel,
-                  border: `1px solid ${C.hair}`,
-                  borderRadius: 99,
-                  width: 30,
-                  height: 30,
-                  display: "grid",
-                  placeItems: "center",
-                  cursor: "pointer"
-                }}
-              >
-                <X size={14} color={C.sandDim} />
-              </button>
-            </div>
-            {children}
-          </div>
-        </div>
-      );
-    }
-
-    function UrgeOverlay({ whys, onClose, onLog }) {
+    function UrgeOverlay({ whys, onClose, onLog, soundEnabled }) {
       const [seconds, setSeconds] = useState(60);
       const [whyIdx, setWhyIdx] = useState(0);
+
+      const cyclePos = (60 - seconds) % 16;
+      const phase = cyclePos < 4 ? "Breathe in" : cyclePos < 8 ? "Hold" : cyclePos < 12 ? "Breathe out" : "Hold";
+
+      // Trigger harmonic chime tone at each 4-second breath transition
+      useEffect(() => {
+        if (seconds > 0 && cyclePos % 4 === 0) {
+          playBreathTone(phase, soundEnabled);
+        }
+      }, [seconds, cyclePos, soundEnabled]);
 
       useEffect(() => {
         const t = setInterval(() => setSeconds((s) => Math.max(0, s - 1)), 1000);
@@ -1007,14 +988,15 @@ function doPost(e) {
         };
       }, [whys.length]);
 
-      const cyclePos = (60 - seconds) % 16;
-      const phase = cyclePos < 4 ? "Breathe in" : cyclePos < 8 ? "Hold" : cyclePos < 12 ? "Breathe out" : "Hold";
       const done = seconds === 0;
 
       return (
         <div style={{ position: "fixed", inset: 0, zIndex: 50, background: C.bg, display: "flex", flexDirection: "column" }}>
           <div style={{ maxWidth: 460, margin: "0 auto", width: "100%", flex: 1, display: "flex", flexDirection: "column", padding: "20px 24px 32px" }}>
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span className="retro-mono" style={{ fontSize: 11, color: C.gold, letterSpacing: 1.2 }}>
+                DE-ESCALATION • BOX BREATHING
+              </span>
               <button
                 onClick={onClose}
                 style={{
@@ -1032,7 +1014,7 @@ function doPost(e) {
               </button>
             </div>
 
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 28 }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24 }}>
               {!done ? (
                 <React.Fragment>
                   <div style={{ position: "relative", width: 190, height: 190, display: "grid", placeItems: "center" }}>
@@ -1041,21 +1023,25 @@ function doPost(e) {
                       background: `radial-gradient(circle, ${C.gold}55, ${C.gold}0a 60%, transparent 75%)`,
                       animation: "breathe 8s ease-in-out infinite"
                     }} />
-                    <div style={{ fontSize: 28, fontWeight: 800, color: C.sand }}>{seconds}</div>
+                    <div style={{ fontSize: 32, fontWeight: 800, color: C.sand }}>{seconds}s</div>
                   </div>
-                  <div className="serif" style={{ fontSize: 20, color: C.gold, letterSpacing: 0.5 }}>{phase}</div>
+                  
+                  <div style={{ textAlign: "center" }}>
+                    <div className="serif" style={{ fontSize: 22, color: C.gold, letterSpacing: 0.5, marginBottom: 4 }}>{phase}</div>
+                    <div style={{ fontSize: 11.5, color: C.sky }}>Listen to the tone & rhythm — let your heart rate drop</div>
+                  </div>
 
                   <UrgeWave seconds={seconds} />
 
-                  <p key={whyIdx} className="fadeIn serif" style={{ fontSize: 15, lineHeight: 1.5, textAlign: "center", color: C.sand, minHeight: 70 }}>
-                    {whys[whyIdx] || whys[0]}
+                  <p key={whyIdx} className="fadeIn serif" style={{ fontSize: 15, lineHeight: 1.5, textAlign: "center", color: C.sand, minHeight: 70, padding: "0 14px" }}>
+                    "{whys[whyIdx] || whys[0]}"
                   </p>
                 </React.Fragment>
               ) : (
                 <div className="fadeIn" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 18 }}>
-                  <Sparkles size={30} color={C.gold} />
-                  <p className="serif" style={{ fontSize: 19, color: C.sand, lineHeight: 1.5 }}>
-                    The wave passed. That was you — staying you.
+                  <Sparkles size={32} color={C.gold} />
+                  <p className="serif" style={{ fontSize: 20, color: C.sand, lineHeight: 1.5 }}>
+                    The wave passed. That was you — staying in control.
                   </p>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10, width: 240, marginTop: 6 }}>
                     <button
@@ -1107,23 +1093,20 @@ function doPost(e) {
             const h = Math.max(10, 100 - dist * 6);
             const active = elapsed >= offset;
             return (
-              <div
-                key={i}
-                style={{
-                  flex: 1,
-                  height: `${active ? h : 10}%`,
-                  borderRadius: 3,
-                  background: active ? C.gold : C.hair,
-                  transition: "height 0.4s ease"
-                }}
-              />
+              <div key={i} style={{
+                flex: 1,
+                height: `${active ? h : 10}%`,
+                borderRadius: 3,
+                background: active ? C.gold : C.hair,
+                transition: "height 0.4s ease"
+              }} />
             );
           })}
         </div>
       );
     }
 
-    function LogScreen({ transactions, setTransactions, prefillUrge, clearPrefill, onSaveToSheet, sheetConnected }) {
+    function LogScreen({ transactions, setTransactions, prefillUrge, clearPrefill, onSaveToSheet, sheetConnected, soundEnabled }) {
       const todayKey = toKey(new Date());
       const existing = transactions.find((t) => t.date === todayKey);
 
@@ -1142,17 +1125,21 @@ function doPost(e) {
       }, [prefillUrge]);
 
       function handleSave() {
-        const newEntry = { date, stayedPure: pure, gazeGuarded: gaze, feeling };
+        // Play specific sound based on purity status
+        if (pure) {
+          playUIFeedback("save_positive", soundEnabled);
+        } else {
+          playUIFeedback("save_negative", soundEnabled);
+        }
+        
+        const entry = { date, stayedPure: pure, gazeGuarded: gaze, feeling };
         setTransactions((prev) => {
           const rest = prev.filter((t) => t.date !== date);
-          return [...rest, newEntry].sort((a, b) =>
-            a.date.localeCompare(b.date)
-          );
+          return [...rest, entry].sort((a, b) => a.date.localeCompare(b.date));
         });
 
-        // Auto sync to Google Sheet if connected
         if (onSaveToSheet) {
-          onSaveToSheet(newEntry);
+          onSaveToSheet(entry);
         }
 
         setSaved(true);
@@ -1171,15 +1158,7 @@ function doPost(e) {
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              style={{
-                width: "100%",
-                background: C.panel,
-                border: `1px solid ${C.hair}`,
-                borderRadius: 12,
-                padding: "12px 14px",
-                color: C.sand,
-                fontSize: 14
-              }}
+              style={{ width: "100%", background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 12, padding: "12px 14px", color: C.sand, fontSize: 14 }}
             />
           </Field>
 
@@ -1196,21 +1175,21 @@ function doPost(e) {
               {FEELINGS.map(({ key, label, color, Icon }) => (
                 <button
                   key={key}
-                  onClick={() => setFeeling(key)}
+                  onClick={() => { playSoftClick(soundEnabled); setFeeling(key); }}
                   style={{
                     display: "flex",
                     alignItems: "center",
                     gap: 10,
                     padding: "12px 14px",
                     borderRadius: 12,
-                    background: feeling === key ? `${color}22` : C.panel,
-                    border: `1px solid ${feeling === key ? color : C.hair}`,
+                    background: feeling === key ? `${color}25` : C.panel,
+                    border: `1.5px solid ${feeling === key ? color : C.hair}`,
                     textAlign: "left",
                     cursor: "pointer"
                   }}
                 >
                   <Icon size={16} color={color} />
-                  <span style={{ fontSize: 13.5, color: C.sand }}>{label}</span>
+                  <span style={{ fontSize: 13.5, color: C.sand, fontWeight: feeling === key ? 700 : 500 }}>{label}</span>
                   {feeling === key && <Check size={14} color={color} style={{ marginLeft: "auto" }} />}
                 </button>
               ))}
@@ -1232,38 +1211,895 @@ function doPost(e) {
               cursor: "pointer"
             }}
           >
-            {saved ? (sheetConnected ? "Saved & Synced to Sheet ✓" : "Saved ✓") : "Save today's entry"}
+            {saved ? "Saved & Synced ✓" : "Save today's entry"}
           </button>
           <p style={{ fontSize: 11, color: C.sandDim, textAlign: "center", marginTop: 8 }}>
-            {sheetConnected ? "🟢 Connected to Google Sheet (Sync active)" : "Tip: Connect your Google Sheet in settings for live cloud sync"}
+            {sheetConnected ? "Saves locally and syncs to your connected Google Sheet." : "Stored on device."}
           </p>
 
-          <div style={{ marginTop: 30 }}>
+          <div style={{ marginTop: 28 }}>
             <h3 style={{ fontSize: 12, letterSpacing: 0.5, color: C.sandDim, marginBottom: 10 }}>Recent entries</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {recent.map((t) => {
-                const f = FEELINGS.find((x) => x.key === t.feeling);
+                const f = FEELINGS.find((x) => x.key === t.feeling) || FEELINGS[1];
                 return (
-                  <div
-                    key={t.date}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      background: C.panel,
-                      border: `1px solid ${C.hair}`,
-                      borderRadius: 12,
-                      padding: "10px 12px"
-                    }}
-                  >
+                  <div key={t.date} style={{ display: "flex", alignItems: "center", gap: 10, background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 12, padding: "10px 12px" }}>
                     <span style={{ fontSize: 12.5, color: C.sandDim, width: 74 }}>{t.date.slice(5)}</span>
                     <Shield size={13} color={t.gazeGuarded ? C.sage : C.rust} />
                     <span style={{ width: 6, height: 6, borderRadius: 99, background: t.stayedPure ? C.sage : C.rust }} />
-                    <span style={{ fontSize: 12, color: C.sandDim, marginLeft: "auto" }}>{f?.label}</span>
+                    <span style={{ fontSize: 12, color: f.color, marginLeft: "auto", fontWeight: 600 }}>{f.label}</span>
                   </div>
                 );
               })}
             </div>
+          </div>
+        </div>
+      );
+    }
+
+    function DashboardScreen({ transactions, soundEnabled }) {
+      const [range, setRange] = useState(30);
+      const [moodChartType, setMoodChartType] = useState("pie"); // "pie" or "line"
+      const [consistencyType, setConsistencyType] = useState("bar"); // "bar" or "line"
+      const [heatmapMonth, setHeatmapMonth] = useState(new Date());
+
+      const filtered = useMemo(() => {
+        if (range === 0) return transactions;
+        const cutoff = toKey(addDays(new Date(), -range));
+        return transactions.filter((t) => t.date >= cutoff);
+      }, [transactions, range]);
+
+      const streak = computeCurrentStreak(transactions);
+      const longest = computeLongestStreak(transactions);
+      const purityRate = pct(filtered.filter((t) => t.stayedPure).length, filtered.length);
+      const gazeRate = pct(filtered.filter((t) => t.gazeGuarded).length, filtered.length);
+      const riskDay = computeRiskWeekday(transactions);
+      const recentAlert = computeRecentTrend(transactions);
+
+      const feelingData = FEELINGS.map((f) => ({
+        name: f.label.split(" ")[0],
+        key: f.key,
+        value: filtered.filter((t) => t.feeling === f.key).length,
+        color: f.color,
+      })).filter((d) => d.value > 0);
+
+      const barData = filtered.slice(-14).map((t) => ({
+        date: t.date.slice(5),
+        ok: t.stayedPure,
+      }));
+
+      // Timeline mood trajectory
+      const timelineData = filtered.slice(-14).map((t) => {
+        const item = FEELINGS.find(f => f.key === t.feeling) || FEELINGS[1];
+        return {
+          date: t.date.slice(5),
+          score: item.score,
+          color: item.color,
+          label: item.label
+        };
+      });
+
+      return (
+        <div style={{ padding: "24px 20px" }}>
+          <h1 className="serif" style={{ fontSize: 23, margin: "0 0 4px" }}>Your patterns</h1>
+          <p style={{ fontSize: 12.5, color: C.sandDim, margin: "0 0 18px" }}>Not a scoreboard — a mirror, so you can plan around it.</p>
+
+          <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+            {[{ l: "7D", v: 7 }, { l: "30D", v: 30 }, { l: "90D", v: 90 }, { l: "All", v: 0 }].map((r) => (
+              <button
+                key={r.l}
+                onClick={() => { playSoftClick(soundEnabled); setRange(r.v); }}
+                style={{
+                  padding: "7px 14px",
+                  borderRadius: 99,
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  background: range === r.v ? C.gold : C.panel,
+                  color: range === r.v ? "#1a1204" : C.sandDim,
+                  border: `1px solid ${range === r.v ? C.gold : C.hair}`,
+                  cursor: "pointer"
+                }}
+              >
+                {r.l}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+            <StatCard icon={<Flame size={15} color={C.gold} />} label="Current streak" value={`${streak.count}d`} />
+            <StatCard 
+              icon={<Trophy size={15} color={C.gold} />} 
+              label="Longest streak" 
+              value={`${longest}d`} 
+              sub={streak.count > 0 && streak.count === longest ? "Personal record! 🌟" : null}
+            />
+            <StatCard icon={<Shield size={15} color={C.sage} />} label="Purity rate" value={`${purityRate}%`} />
+            <StatCard icon={<Shield size={15} color={C.sky} />} label="Gaze guarded" value={`${gazeRate}%`} />
+          </div>
+
+          {(riskDay || recentAlert) && (
+            <div style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 14, padding: 14, marginBottom: 16, display: "flex", gap: 10 }}>
+              <Compass size={16} color={C.gold} style={{ flexShrink: 0, marginTop: 1 }} />
+              <div style={{ fontSize: 12.5, color: C.sandDim, lineHeight: 1.5 }}>
+                {recentAlert && <div style={{ marginBottom: riskDay ? 6 : 0 }}>{recentAlert}</div>}
+                {riskDay && (
+                  <div>
+                    Historically, <b style={{ color: C.sand }}>{riskDay}</b> has been your toughest day of the week — plan something grounding for it.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Daily consistency with Bar / Line toggle */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <SectionTitle style={{ margin: 0 }}>Daily consistency (Last 14 days)</SectionTitle>
+            <div style={{ display: "flex", gap: 4, background: C.panel, padding: 2, borderRadius: 8, border: `1px solid ${C.hair}` }}>
+              <button
+                onClick={() => { playSoftClick(soundEnabled); setConsistencyType("bar"); }}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  border: "none",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  background: consistencyType === "bar" ? C.gold : "transparent",
+                  color: consistencyType === "bar" ? "#1a1204" : C.sandDim,
+                  cursor: "pointer"
+                }}
+              >
+                Bar
+              </button>
+              <button
+                onClick={() => { playSoftClick(soundEnabled); setConsistencyType("line"); }}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  border: "none",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  background: consistencyType === "line" ? C.gold : "transparent",
+                  color: consistencyType === "line" ? "#1a1204" : C.sandDim,
+                  cursor: "pointer"
+                }}
+              >
+                Line
+              </button>
+            </div>
+          </div>
+          <div style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 16, padding: "16px 12px 12px", marginBottom: 18 }}>
+            {consistencyType === "bar" ? (
+              <ConsistencyBars data={barData} />
+            ) : (
+              <ConsistencyLineChart data={barData} />
+            )}
+          </div>
+
+          {/* Mood chart with Pie / Line toggle */}
+          {feelingData.length > 0 && (
+            <React.Fragment>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <SectionTitle style={{ margin: 0 }}>Mood & Urge State</SectionTitle>
+                <div style={{ display: "flex", gap: 4, background: C.panel, padding: 2, borderRadius: 8, border: `1px solid ${C.hair}` }}>
+                  <button
+                    onClick={() => { playSoftClick(soundEnabled); setMoodChartType("pie"); }}
+                    style={{
+                      padding: "4px 8px",
+                      borderRadius: 6,
+                      border: "none",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      background: moodChartType === "pie" ? C.gold : "transparent",
+                      color: moodChartType === "pie" ? "#1a1204" : C.sandDim,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Pie
+                  </button>
+                  <button
+                    onClick={() => { playSoftClick(soundEnabled); setMoodChartType("line"); }}
+                    style={{
+                      padding: "4px 8px",
+                      borderRadius: 6,
+                      border: "none",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      background: moodChartType === "line" ? C.gold : "transparent",
+                      color: moodChartType === "line" ? "#1a1204" : C.sandDim,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Timeline Line
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 16, padding: 14, marginBottom: 18 }}>
+                {moodChartType === "pie" ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <DonutChart data={feelingData} />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
+                      {feelingData.map((d) => (
+                        <div key={d.key} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12 }}>
+                          <span style={{ width: 9, height: 9, borderRadius: 99, background: d.color, boxShadow: `0 0 6px ${d.color}66` }} />
+                          <span style={{ color: C.sand }}>{d.name}</span>
+                          <span style={{ color: d.color, fontWeight: 700, marginLeft: "auto" }}>{d.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <MoodTimelineLineChart data={timelineData} />
+                )}
+              </div>
+            </React.Fragment>
+          )}
+
+          {/* Interactive Heatmap with Previous / Next Month Navigation */}
+          <SectionTitle>Monthly History Calendar</SectionTitle>
+          <MonthHeatmap 
+            transactions={transactions} 
+            displayDate={heatmapMonth}
+            onMonthChange={(offset) => {
+              playSoftClick(soundEnabled);
+              setHeatmapMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + offset, 1));
+            }}
+            onResetToCurrentMonth={() => {
+              playSoftClick(soundEnabled);
+              setHeatmapMonth(new Date());
+            }}
+          />
+
+          <p style={{ fontSize: 10.5, color: C.sandDim, textAlign: "center", marginTop: 20, lineHeight: 1.5 }}>
+            All statistics calculate live from your stored check-ins & connected Google Sheet.
+          </p>
+        </div>
+      );
+    }
+
+    function ConsistencyBars({ data }) {
+      if (!data.length) return <div style={{ height: 90, display: "grid", placeItems: "center", color: C.sandDim, fontSize: 11 }}>No entries in range</div>;
+      return (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", height: 96, gap: 4 }}>
+          {data.map((item, idx) => (
+            <div key={idx} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%", justifyContent: "flex-end" }}>
+              <div
+                title={`${item.date}: ${item.ok ? "Pure" : "Relapse"}`}
+                style={{
+                  width: "100%",
+                  maxWidth: 16,
+                  height: item.ok ? "78%" : "28%",
+                  borderRadius: 4,
+                  background: item.ok ? C.sage : C.rust,
+                  boxShadow: item.ok ? `0 0 8px ${C.sage}44` : `0 0 8px ${C.rust}44`,
+                  transition: "height 0.3s ease"
+                }}
+              />
+              <span style={{ fontSize: 8.5, color: C.sandDim, marginTop: 6, transform: "scale(0.9)" }}>
+                {item.date.slice(3)}
+              </span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    function ConsistencyLineChart({ data }) {
+      if (!data.length) return <div style={{ height: 90, display: "grid", placeItems: "center", color: C.sandDim, fontSize: 11 }}>No entries in range</div>;
+      const width = 340;
+      const height = 90;
+      const step = width / Math.max(1, data.length - 1);
+      const points = data.map((d, i) => {
+        const x = i * step;
+        const y = d.ok ? 20 : 70;
+        return { x, y, ok: d.ok, date: d.date };
+      });
+      const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+
+      return (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.sandDim, marginBottom: 6 }}>
+            <span style={{ color: C.sage }}>● Pure (High)</span>
+            <span style={{ color: C.rust }}>● Relapse (Low)</span>
+          </div>
+          <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: 90, overflow: "visible" }}>
+            <line x1="0" y1="20" x2={width} y2="20" stroke={C.hair} strokeDasharray="3 3" />
+            <line x1="0" y1="70" x2={width} y2="70" stroke={C.hair} strokeDasharray="3 3" />
+            <path d={pathD} fill="none" stroke={C.gold} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            {points.map((p, idx) => (
+              <circle
+                key={idx}
+                cx={p.x}
+                cy={p.y}
+                r="4.5"
+                fill={p.ok ? C.sage : C.rust}
+                stroke="#0B1F26"
+                strokeWidth="1.5"
+              />
+            ))}
+          </svg>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 8.5, color: C.sandDim }}>
+            <span>{data[0]?.date}</span>
+            <span>{data[Math.floor(data.length / 2)]?.date}</span>
+            <span>{data[data.length - 1]?.date}</span>
+          </div>
+        </div>
+      );
+    }
+
+    function MoodTimelineLineChart({ data }) {
+      if (!data.length) return <div style={{ height: 100, display: "grid", placeItems: "center", color: C.sandDim, fontSize: 11 }}>No entries logged yet</div>;
+      const width = 340;
+      const height = 90;
+      const step = width / Math.max(1, data.length - 1);
+      const points = data.map((d, i) => {
+        const x = i * step;
+        // score: 3 (positive) -> y=16, 2 (neutral) -> y=38, 1 (urge) -> y=60, 0 (struggling) -> y=82
+        const y = 82 - (d.score * 22);
+        return { x, y, ...d };
+      });
+      const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+
+      return (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.sandDim, marginBottom: 8, flexWrap: "wrap", gap: 6 }}>
+            <span style={{ color: C.sage }}>● Positive</span>
+            <span style={{ color: C.sky }}>● Neutral</span>
+            <span style={{ color: C.amber }}>● Urge</span>
+            <span style={{ color: C.rust }}>● Struggling</span>
+          </div>
+          <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: 95, overflow: "visible" }}>
+            <line x1="0" y1="16" x2={width} y2="16" stroke={C.hair} strokeDasharray="2 3" />
+            <line x1="0" y1="38" x2={width} y2="38" stroke={C.hair} strokeDasharray="2 3" />
+            <line x1="0" y1="60" x2={width} y2="60" stroke={C.hair} strokeDasharray="2 3" />
+            <line x1="0" y1="82" x2={width} y2="82" stroke={C.hair} strokeDasharray="2 3" />
+            <path d={pathD} fill="none" stroke={C.sky} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            {points.map((p, idx) => (
+              <circle
+                key={idx}
+                cx={p.x}
+                cy={p.y}
+                r="5"
+                fill={p.color}
+                stroke="#0B1F26"
+                strokeWidth="1.5"
+              />
+            ))}
+          </svg>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 8.5, color: C.sandDim }}>
+            <span>{data[0]?.date}</span>
+            <span>{data[Math.floor(data.length / 2)]?.date}</span>
+            <span>{data[data.length - 1]?.date}</span>
+          </div>
+        </div>
+      );
+    }
+
+    function DonutChart({ data }) {
+      const total = data.reduce((s, d) => s + d.value, 0);
+      if (total === 0) return null;
+      let acc = 0;
+      const size = 110;
+      const stroke = 14;
+      const r = (size - stroke) / 2;
+      const circ = 2 * Math.PI * r;
+
+      return (
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          {data.map((d, i) => {
+            const frac = d.value / total;
+            const dash = frac * circ;
+            const offset = circ * (0.25 - acc);
+            acc += frac;
+            return (
+              <circle
+                key={i}
+                cx={size / 2}
+                cy={size / 2}
+                r={r}
+                fill="transparent"
+                stroke={d.color}
+                strokeWidth={stroke}
+                strokeDasharray={`${dash} ${circ - dash}`}
+                strokeDashoffset={offset}
+              />
+            );
+          })}
+        </svg>
+      );
+    }
+
+    function MonthHeatmap({ transactions, displayDate, onMonthChange, onResetToCurrentMonth }) {
+      const map = useMemo(() => Object.fromEntries(transactions.map((t) => [t.date, t])), [transactions]);
+      const activeDate = displayDate || new Date();
+      const year = activeDate.getFullYear();
+      const month = activeDate.getMonth();
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const cells = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+
+      const monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+      ];
+      const isCurrentMonth = activeDate.getFullYear() === new Date().getFullYear() && activeDate.getMonth() === new Date().getMonth();
+
+      return (
+        <div style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 16, padding: 14 }}>
+          {/* Month Header with Navigation Controls */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span className="serif" style={{ fontSize: 16, fontWeight: 600, color: C.sand }}>
+                {monthNames[month]} {year}
+              </span>
+              {!isCurrentMonth && (
+                <button
+                  onClick={onResetToCurrentMonth}
+                  style={{
+                    background: `${C.gold}22`,
+                    border: `1px solid ${C.gold}44`,
+                    color: C.gold,
+                    fontSize: 10,
+                    padding: "2px 7px",
+                    borderRadius: 99,
+                    cursor: "pointer",
+                    fontWeight: 700
+                  }}
+                >
+                  Today
+                </button>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                onClick={() => onMonthChange(-1)}
+                title="Previous Month"
+                style={{
+                  background: C.bg2,
+                  border: `1px solid ${C.hair}`,
+                  color: C.sand,
+                  borderRadius: 8,
+                  width: 28,
+                  height: 28,
+                  display: "grid",
+                  placeItems: "center",
+                  cursor: "pointer"
+                }}
+              >
+                <ChevronLeft size={14} color={C.sand} />
+              </button>
+              <button
+                onClick={() => onMonthChange(1)}
+                title="Next Month"
+                style={{
+                  background: C.bg2,
+                  border: `1px solid ${C.hair}`,
+                  color: C.sand,
+                  borderRadius: 8,
+                  width: 28,
+                  height: 28,
+                  display: "grid",
+                  placeItems: "center",
+                  cursor: "pointer"
+                }}
+              >
+                <ChevronRight size={14} color={C.sand} />
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 5, marginBottom: 6 }}>
+            {WEEKDAYS.map((w) => (
+              <div key={w} style={{ fontSize: 9, color: C.sandDim, textAlign: "center", fontWeight: 700 }}>
+                {w[0]}
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 5 }}>
+            {cells.map((day, i) => {
+              if (!day) return <div key={i} />;
+              const key = toKey(new Date(year, month, day));
+              const t = map[key];
+              let bg = "#1b3843";
+              if (t) bg = t.stayedPure ? C.sage : C.rust;
+              const isToday = key === toKey(new Date());
+              return (
+                <div
+                  key={i}
+                  title={t ? `${key}: ${t.stayedPure ? 'Stayed Pure' : 'Relapse'} (${t.feeling})` : key}
+                  style={{
+                    aspectRatio: "1",
+                    borderRadius: 6,
+                    background: bg,
+                    opacity: t ? 0.95 : 0.45,
+                    display: "grid",
+                    placeItems: "center",
+                    fontSize: 8.5,
+                    color: t ? "#0B1F26" : C.sandDim,
+                    boxShadow: isToday ? `0 0 0 1.5px ${C.gold}` : "none",
+                    fontWeight: 700,
+                    cursor: "default"
+                  }}
+                >
+                  {day}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    function WhysSettings({ whys, setWhys, onClose, sheetUrl, onUpdateSheetUrl, onSyncNow, isSyncing, soundEnabled }) {
+      const [text, setText] = useState("");
+      const [activeTab, setActiveTab] = useState("sheet"); // "sheet" or "whys"
+      const [scriptUrlInput, setScriptUrlInput] = useState(sheetUrl || "");
+      const [copiedCode, setCopiedCode] = useState(false);
+      const fileInputRef = useRef(null);
+
+      function handleFileUpload(e) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          const content = evt.target?.result;
+          if (typeof content !== "string") return;
+
+          const lines = content
+            .split(/\r?\n/)
+            .map((l) => l.trim().replace(/^["']|["']$/g, ""))
+            .filter((l) => l.length > 0);
+
+          const cleanLines = lines.filter(
+            (l) => !["why", "my why", "whys", "reason", "motivation", "reasons"].includes(l.toLowerCase())
+          );
+
+          if (cleanLines.length > 0) {
+            setWhys(cleanLines);
+          }
+        };
+        reader.readAsText(file);
+      }
+
+      function copyScriptCode() {
+        playSoftClick(soundEnabled);
+        const textarea = document.createElement("textarea");
+        textarea.value = `function doGet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let whys = [];
+  const whysSheet = ss.getSheetByName("Sheet2") || ss.getSheetByName("Whys") || ss.getSheets()[1];
+  if (whysSheet) {
+    const data = whysSheet.getDataRange().getValues();
+    whys = data.flat().filter(r => r && String(r).trim().length > 0 && !["why", "whys", "reason"].includes(String(r).toLowerCase()));
+  }
+  let logs = [];
+  const logSheet = ss.getSheetByName("Sheet1") || ss.getSheetByName("Logs") || ss.getSheets()[0];
+  if (logSheet) {
+    const rows = logSheet.getDataRange().getValues();
+    if (rows.length > 1) {
+      for (let i = 1; i < rows.length; i++) {
+        const [d, pure, gaze, feeling] = rows[i];
+        if (d) {
+          const dateStr = d instanceof Date ? Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd") : String(d).slice(0, 10);
+          logs.push({
+            date: dateStr,
+            stayedPure: pure === true || String(pure).toLowerCase() === "yes" || pure === 1,
+            gazeGuarded: gaze === true || String(gaze).toLowerCase() === "yes" || gaze === 1,
+            feeling: feeling || "Positive"
+          });
+        }
+      }
+    }
+  }
+  return ContentService.createTextOutput(JSON.stringify({ whys: whys.length ? whys : null, logs })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const logSheet = ss.getSheetByName("Sheet1") || ss.getSheetByName("Logs") || ss.getSheets()[0];
+    const rows = logSheet.getDataRange().getValues();
+    let updated = false;
+    for (let i = 1; i < rows.length; i++) {
+      const d = rows[i][0];
+      const dStr = d instanceof Date ? Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd") : String(d).slice(0, 10);
+      if (dStr === data.date) {
+        logSheet.getRange(i + 1, 1, 1, 4).setValues([[data.date, data.stayedPure ? "Yes" : "No", data.gazeGuarded ? "Yes" : "No", data.feeling]]);
+        updated = true;
+        break;
+      }
+    }
+    if (!updated) {
+      logSheet.appendRow([data.date, data.stayedPure ? "Yes" : "No", data.gazeGuarded ? "Yes" : "No", data.feeling]);
+    }
+    return ContentService.createTextOutput(JSON.stringify({ status: "success" })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", error: err.message })).setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+        setCopiedCode(true);
+        setTimeout(() => setCopiedCode(false), 2500);
+      }
+
+      return (
+        <Sheet onClose={onClose} title="Companion Data & Sheet">
+          <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+            <button
+              onClick={() => { playSoftClick(soundEnabled); setActiveTab("sheet"); }}
+              style={{
+                flex: 1,
+                padding: "8px 0",
+                borderRadius: 10,
+                border: "none",
+                fontSize: 12.5,
+                fontWeight: 700,
+                background: activeTab === "sheet" ? C.gold : C.panel,
+                color: activeTab === "sheet" ? "#1a1204" : C.sandDim,
+                cursor: "pointer"
+              }}
+            >
+              Google Sheet DB
+            </button>
+            <button
+              onClick={() => { playSoftClick(soundEnabled); setActiveTab("whys"); }}
+              style={{
+                flex: 1,
+                padding: "8px 0",
+                borderRadius: 10,
+                border: "none",
+                fontSize: 12.5,
+                fontWeight: 700,
+                background: activeTab === "whys" ? C.gold : C.panel,
+                color: activeTab === "whys" ? "#1a1204" : C.sandDim,
+                cursor: "pointer"
+              }}
+            >
+              My Whys ({whys.length})
+            </button>
+          </div>
+
+          {activeTab === "sheet" ? (
+            <div>
+              <p style={{ fontSize: 12.5, color: C.sandDim, lineHeight: 1.5, margin: "0 0 14px" }}>
+                Connected to your Google Sheet to read your Whys and save your check-in logs automatically.
+              </p>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11, color: C.sandDim, display: "block", marginBottom: 6 }}>
+                  Google Apps Script Web App URL:
+                </label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    value={scriptUrlInput}
+                    onChange={(e) => setScriptUrlInput(e.target.value)}
+                    placeholder="https://script.google.com/macros/s/.../exec"
+                    style={{
+                      flex: 1,
+                      background: C.panel,
+                      border: `1px solid ${C.hair}`,
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                      color: C.sand,
+                      fontSize: 12
+                    }}
+                  />
+                  <button
+                    onClick={() => { playSoftClick(soundEnabled); onUpdateSheetUrl(scriptUrlInput); }}
+                    style={{
+                      background: C.gold,
+                      color: "#1a1204",
+                      border: "none",
+                      borderRadius: 10,
+                      padding: "0 14px",
+                      fontWeight: 700,
+                      fontSize: 12,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+
+              {sheetUrl && (
+                <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                  <button
+                    onClick={() => { playSoftClick(soundEnabled); onSyncNow(); }}
+                    disabled={isSyncing}
+                    style={{
+                      flex: 1,
+                      background: `${C.sage}22`,
+                      border: `1px solid ${C.sage}`,
+                      color: C.sage,
+                      padding: "10px",
+                      borderRadius: 10,
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6
+                    }}
+                  >
+                    <RefreshCw size={13} color={C.sage} />
+                    {isSyncing ? "Syncing with Sheet…" : "Sync Now from Google Sheet"}
+                  </button>
+                  <button
+                    onClick={() => { playSoftClick(soundEnabled); onUpdateSheetUrl(""); }}
+                    style={{
+                      background: "transparent",
+                      border: `1px solid ${C.hair}`,
+                      color: C.rust,
+                      padding: "10px 12px",
+                      borderRadius: 10,
+                      fontSize: 12,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              )}
+
+              <div style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 12, padding: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: C.sand }}>Setup instructions:</span>
+                  <button
+                    onClick={copyScriptCode}
+                    style={{
+                      background: copiedCode ? C.sage : C.gold,
+                      color: "#1a1204",
+                      border: "none",
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: "4px 8px",
+                      cursor: "pointer"
+                    }}
+                  >
+                    {copiedCode ? "Copied code! ✓" : "Copy Google Script"}
+                  </button>
+                </div>
+                <ol style={{ margin: 0, paddingLeft: 18, fontSize: 11.5, color: C.sandDim, lineHeight: 1.6 }}>
+                  <li>Open your Google Sheet (Sheet1 for logs, Sheet2 for Whys).</li>
+                  <li>Click <b>Extensions → Apps Script</b>.</li>
+                  <li>Paste the script code and click <b>Save (💾)</b>.</li>
+                  <li>Click <b>Deploy → New deployment</b>.</li>
+                  <li>Choose <b>Web app</b>, set <i>Who has access</i> to <b>Anyone</b>, and deploy.</li>
+                  <li>Copy the resulting Web App URL and paste it into the box above!</li>
+                </ol>
+              </div>
+
+              <div style={{ marginTop: 16 }}>
+                <span style={{ fontSize: 11, color: C.sandDim, display: "block", marginBottom: 8 }}>
+                  Or import directly from an offline CSV:
+                </span>
+                <input
+                  type="file"
+                  accept=".csv,.txt"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  style={{ display: "none" }}
+                />
+                <button
+                  onClick={() => { playSoftClick(soundEnabled); fileInputRef.current?.click(); }}
+                  style={{
+                    width: "100%",
+                    background: "transparent",
+                    border: `1px dashed ${C.hair}`,
+                    color: C.sandDim,
+                    padding: "9px 12px",
+                    borderRadius: 10,
+                    fontSize: 12,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                  }}
+                >
+                  <Sparkles size={14} color={C.gold} />
+                  Import Companion101.csv file
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p style={{ fontSize: 12.5, color: C.sandDim, lineHeight: 1.5, marginBottom: 14 }}>
+                These are the reasons displayed in your anchor and scrolling retro ticker.
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 18 }}>
+                {whys.map((w, i) => (
+                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 12, padding: 12 }}>
+                    <p className="serif" style={{ flex: 1, fontSize: 13.5, lineHeight: 1.5, margin: 0, color: C.sand }}>{w}</p>
+                    <button
+                      onClick={() => { playSoftClick(soundEnabled); setWhys(whys.filter((_, j) => j !== i)); }}
+                      style={{ background: "transparent", border: "none", padding: 4, cursor: "pointer" }}
+                      aria-label="Remove"
+                    >
+                      <Trash2 size={15} color={C.rust} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="Add a new why…"
+                  style={{
+                    flex: 1,
+                    background: C.bg2,
+                    border: `1px solid ${C.hair}`,
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                    color: C.sand,
+                    fontSize: 13.5
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    playSoftClick(soundEnabled);
+                    if (text.trim()) {
+                      setWhys([...whys, text.trim()]);
+                      setText("");
+                    }
+                  }}
+                  style={{
+                    background: C.gold,
+                    border: "none",
+                    borderRadius: 12,
+                    width: 44,
+                    display: "grid",
+                    placeItems: "center",
+                    cursor: "pointer"
+                  }}
+                >
+                  <Plus size={18} color="#1a1204" />
+                </button>
+              </div>
+            </div>
+          )}
+        </Sheet>
+      );
+    }
+
+    function Sheet({ onClose, title, children }) {
+      return (
+        <div style={{ position: "fixed", inset: 0, zIndex: 40, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "#00000088" }} />
+          <div className="slideUp" style={{
+            position: "relative", width: "100%", maxWidth: 460, maxHeight: "82vh", overflowY: "auto",
+            background: C.bg2, borderRadius: "22px 22px 0 0", padding: "18px 20px 28px", border: `1px solid ${C.hair}`
+          }}>
+            <div style={{ width: 36, height: 4, borderRadius: 99, background: C.hair, margin: "0 auto 16px" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <h2 className="serif" style={{ fontSize: 19, margin: 0, color: C.sand }}>{title}</h2>
+              <button
+                onClick={onClose}
+                style={{
+                  background: C.panel,
+                  border: `1px solid ${C.hair}`,
+                  borderRadius: 99,
+                  width: 30,
+                  height: 30,
+                  display: "grid",
+                  placeItems: "center",
+                  cursor: "pointer"
+                }}
+              >
+                <X size={14} color={C.sandDim} />
+              </button>
+            </div>
+            {children}
           </div>
         </div>
       );
@@ -1304,175 +2140,7 @@ function doPost(e) {
       );
     }
 
-    function DashboardScreen({ transactions }) {
-      const [range, setRange] = useState(30);
-      const filtered = useMemo(() => {
-        if (range === 0) return transactions;
-        const cutoff = toKey(addDays(new Date(), -range));
-        return transactions.filter((t) => t.date >= cutoff);
-      }, [transactions, range]);
-
-      const streak = computeCurrentStreak(transactions);
-      const longest = computeLongestStreak(transactions);
-      const purityRate = pct(filtered.filter((t) => t.stayedPure).length, filtered.length);
-      const gazeRate = pct(filtered.filter((t) => t.gazeGuarded).length, filtered.length);
-      const riskDay = computeRiskWeekday(transactions);
-      const recentAlert = computeRecentTrend(transactions);
-
-      const feelingData = FEELINGS.map((f) => ({
-        name: f.label.split(" ")[0],
-        key: f.key,
-        value: filtered.filter((t) => t.feeling === f.key).length,
-        color: f.color,
-      })).filter((d) => d.value > 0);
-
-      const barData = filtered.slice(-14).map((t) => ({
-        date: t.date.slice(5),
-        ok: t.stayedPure,
-      }));
-
-      return (
-        <div style={{ padding: "24px 20px" }}>
-          <h1 className="serif" style={{ fontSize: 23, margin: "0 0 4px" }}>Your patterns</h1>
-          <p style={{ fontSize: 12.5, color: C.sandDim, margin: "0 0 18px" }}>Not a scoreboard — a mirror, so you can plan around it.</p>
-
-          <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
-            {[{ l: "7D", v: 7 }, { l: "30D", v: 30 }, { l: "90D", v: 90 }, { l: "All", v: 0 }].map((r) => (
-              <button
-                key={r.l}
-                onClick={() => setRange(r.v)}
-                style={{
-                  padding: "7px 14px",
-                  borderRadius: 99,
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                  background: range === r.v ? C.gold : C.panel,
-                  color: range === r.v ? "#1a1204" : C.sandDim,
-                  border: `1px solid ${range === r.v ? C.gold : C.hair}`,
-                  cursor: "pointer"
-                }}
-              >
-                {r.l}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-            <StatCard icon={<Flame size={15} color={C.gold} />} label="Current streak" value={`${streak.count}d`} />
-            <StatCard icon={<Trophy size={15} color={C.gold} />} label="Longest streak" value={`${longest}d`} />
-            <StatCard icon={<Shield size={15} color={C.sage} />} label="Purity rate" value={`${purityRate}%`} />
-            <StatCard icon={<Shield size={15} color={C.sage} />} label="Gaze guarded" value={`${gazeRate}%`} />
-          </div>
-
-          {(riskDay || recentAlert) && (
-            <div style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 14, padding: 14, marginBottom: 16, display: "flex", gap: 10 }}>
-              <Compass size={16} color={C.gold} style={{ flexShrink: 0, marginTop: 1 }} />
-              <div style={{ fontSize: 12.5, color: C.sandDim, lineHeight: 1.5 }}>
-                {recentAlert && <div style={{ marginBottom: riskDay ? 6 : 0 }}>{recentAlert}</div>}
-                {riskDay && (
-                  <div>
-                    Historically, <b style={{ color: C.sand }}>{riskDay}</b> has been your toughest day of the week — plan something grounding for it.
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <SectionTitle>Daily consistency</SectionTitle>
-          <div style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 16, padding: "16px 12px 12px", marginBottom: 18 }}>
-            <ConsistencyBars data={barData} />
-          </div>
-
-          {feelingData.length > 0 && (
-            <React.Fragment>
-              <SectionTitle>How you've been feeling</SectionTitle>
-              <div style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 16, padding: 14, marginBottom: 18, display: "flex", alignItems: "center", gap: 14 }}>
-                <DonutChart data={feelingData} />
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
-                  {feelingData.map((d) => (
-                    <div key={d.key} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: 99, background: d.color }} />
-                      <span style={{ color: C.sandDim }}>{d.name}</span>
-                      <span style={{ color: C.sand, fontWeight: 700, marginLeft: "auto" }}>{d.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </React.Fragment>
-          )}
-
-          <SectionTitle>This month</SectionTitle>
-          <MonthHeatmap transactions={transactions} />
-
-          <p style={{ fontSize: 10.5, color: C.sandDim, textAlign: "center", marginTop: 20, lineHeight: 1.5 }}>
-            Sample history shown for preview. Your real check-ins will replace this once connected to your sheet.
-          </p>
-        </div>
-      );
-    }
-
-    function ConsistencyBars({ data }) {
-      if (!data.length) return <div style={{ height: 90, display: "grid", placeItems: "center", color: C.sandDim, fontSize: 11 }}>No entries in range</div>;
-      return (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", height: 96, gap: 4 }}>
-          {data.map((item, idx) => (
-            <div key={idx} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%", justifyContent: "flex-end" }}>
-              <div
-                title={`${item.date}: ${item.ok ? "Pure" : "Relapse"}`}
-                style={{
-                  width: "100%",
-                  maxWidth: 16,
-                  height: item.ok ? "78%" : "28%",
-                  borderRadius: 4,
-                  background: item.ok ? C.sage : C.rust,
-                  transition: "height 0.3s ease"
-                }}
-              />
-              <span style={{ fontSize: 8.5, color: C.sandDim, marginTop: 6, transform: "scale(0.9)" }}>
-                {item.date.slice(3)}
-              </span>
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    function DonutChart({ data }) {
-      const total = data.reduce((sum, d) => sum + d.value, 0) || 1;
-      let cumulativePercent = 0;
-
-      const getCoordinatesForPercent = (percent) => {
-        const x = Math.cos(2 * Math.PI * percent);
-        const y = Math.sin(2 * Math.PI * percent);
-        return [x, y];
-      };
-
-      return (
-        <div style={{ position: "relative", width: 100, height: 100 }}>
-          <svg viewBox="-1 -1 2 2" style={{ transform: "rotate(-90deg)", width: "100%", height: "100%" }}>
-            {data.map((slice, i) => {
-              const startPercent = cumulativePercent;
-              const slicePercent = slice.value / total;
-              cumulativePercent += slicePercent;
-
-              const [startX, startY] = getCoordinatesForPercent(startPercent);
-              const [endX, endY] = getCoordinatesForPercent(cumulativePercent);
-              const largeArcFlag = slicePercent > 0.5 ? 1 : 0;
-
-              const pathData = slicePercent >= 0.99
-                ? "M 1 0 A 1 1 0 1 1 -1 0 A 1 1 0 1 1 1 0"
-                : `M 0 0 L ${startX} ${startY} A 1 1 0 ${largeArcFlag} 1 ${endX} ${endY} Z`;
-
-              return <path key={i} d={pathData} fill={slice.color} />;
-            })}
-            {/* Cut out inner circle for donut look */}
-            <circle cx="0" cy="0" r="0.6" fill={C.panel} />
-          </svg>
-        </div>
-      );
-    }
-
-    function StatCard({ icon, label, value }) {
+    function StatCard({ icon, label, value, sub }) {
       return (
         <div style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 14, padding: "13px 14px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
@@ -1480,62 +2148,16 @@ function doPost(e) {
             <span style={{ fontSize: 11, color: C.sandDim }}>{label}</span>
           </div>
           <div style={{ fontSize: 20, fontWeight: 800, color: C.sand }}>{value}</div>
+          {sub && <div style={{ fontSize: 10, color: C.gold, marginTop: 3, fontWeight: 700 }}>{sub}</div>}
         </div>
       );
     }
 
-    function SectionTitle({ children }) {
-      return <h3 style={{ fontSize: 12, letterSpacing: 0.5, color: C.sandDim, margin: "0 0 10px" }}>{children}</h3>;
-    }
-
-    function MonthHeatmap({ transactions }) {
-      const map = useMemo(() => Object.fromEntries(transactions.map((t) => [t.date, t])), [transactions]);
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth();
-      const firstDay = new Date(year, month, 1).getDay();
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      const cells = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
-
+    function SectionTitle({ children, style }) {
       return (
-        <div style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 16, padding: 14 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 5, marginBottom: 6 }}>
-            {WEEKDAYS.map((w) => (
-              <div key={w} style={{ fontSize: 9, color: C.sandDim, textAlign: "center" }}>
-                {w[0]}
-              </div>
-            ))}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 5 }}>
-            {cells.map((day, i) => {
-              if (!day) return <div key={i} />;
-              const key = toKey(new Date(year, month, day));
-              const t = map[key];
-              let bg = "#1b3843";
-              if (t) bg = t.stayedPure ? C.sage : C.rust;
-              const isToday = key === toKey(new Date());
-              return (
-                <div
-                  key={i}
-                  style={{
-                    aspectRatio: "1",
-                    borderRadius: 6,
-                    background: bg,
-                    opacity: t ? 0.85 : 0.5,
-                    display: "grid",
-                    placeItems: "center",
-                    fontSize: 8.5,
-                    color: t ? "#0B1F26" : C.sandDim,
-                    boxShadow: isToday ? `0 0 0 1.5px ${C.gold}` : "none",
-                    fontWeight: 700
-                  }}
-                >
-                  {day}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <h3 style={{ fontSize: 12, letterSpacing: 0.5, color: C.sandDim, margin: "0 0 10px", ...style }}>
+          {children}
+        </h3>
       );
     }
 
@@ -1586,26 +2208,113 @@ function doPost(e) {
       );
     }
 
+    function parseDateKey(key) {
+      if (!key || typeof key !== "string") return null;
+      const parts = key.slice(0, 10).split("-");
+      if (parts.length !== 3) return null;
+      const [y, m, d] = parts.map(Number);
+      if (isNaN(y) || isNaN(m) || isNaN(d)) return null;
+      const date = new Date(y, m - 1, d);
+      date.setHours(0, 0, 0, 0);
+      return date;
+    }
+
+    function daysDiff(d1, d2) {
+      const t1 = Date.UTC(d1.getFullYear(), d1.getMonth(), d1.getDate());
+      const t2 = Date.UTC(d2.getFullYear(), d2.getMonth(), d2.getDate());
+      return Math.round((t1 - t2) / (1000 * 60 * 60 * 24));
+    }
+
     function computeCurrentStreak(transactions) {
-      const sorted = [...transactions].sort((a, b) => b.date.localeCompare(a.date));
-      let count = 0;
-      for (const t of sorted) {
-        if (t.stayedPure) count++;
-        else break;
+      if (!transactions || transactions.length === 0) return { count: 0 };
+
+      // Deduplicate entries by calendar date
+      const map = new Map();
+      transactions.forEach((t) => {
+        if (t.date) map.set(t.date.slice(0, 10), t);
+      });
+
+      const sorted = Array.from(map.values())
+        .filter((t) => parseDateKey(t.date) !== null)
+        .sort((a, b) => b.date.localeCompare(a.date));
+
+      if (sorted.length === 0) return { count: 0 };
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const latestDate = parseDateKey(sorted[0].date);
+      const diffFromToday = daysDiff(today, latestDate);
+
+      // If the latest logged date is older than yesterday, current streak has lapsed
+      if (diffFromToday > 1) {
+        return { count: 0 };
       }
+
+      // If the latest entry was a relapse, current streak is 0
+      if (!sorted[0].stayedPure) {
+        return { count: 0 };
+      }
+
+      let count = 1;
+      let prevDate = latestDate;
+
+      for (let i = 1; i < sorted.length; i++) {
+        const curr = sorted[i];
+        const currDate = parseDateKey(curr.date);
+        // Verify entries are strictly 1 calendar day apart
+        if (daysDiff(prevDate, currDate) === 1) {
+          if (curr.stayedPure) {
+            count++;
+            prevDate = currDate;
+          } else {
+            break;
+          }
+        } else {
+          // A missed date gap breaks continuous streak
+          break;
+        }
+      }
+
       return { count };
     }
 
     function computeLongestStreak(transactions) {
-      const sorted = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
-      let max = 0, cur = 0;
+      if (!transactions || transactions.length === 0) return 0;
+
+      const map = new Map();
+      transactions.forEach((t) => {
+        if (t.date) map.set(t.date.slice(0, 10), t);
+      });
+
+      const sorted = Array.from(map.values())
+        .filter((t) => parseDateKey(t.date) !== null)
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      let maxStreak = 0;
+      let cur = 0;
+      let prevDate = null;
+
       for (const t of sorted) {
+        const currDate = parseDateKey(t.date);
+
         if (t.stayedPure) {
-          cur++;
-          max = Math.max(max, cur);
-        } else cur = 0;
+          if (prevDate && daysDiff(currDate, prevDate) === 1) {
+            cur++;
+          } else {
+            cur = 1;
+          }
+          prevDate = currDate;
+          if (cur > maxStreak) {
+            maxStreak = cur;
+          }
+        } else {
+          cur = 0;
+          prevDate = currDate;
+        }
       }
-      return max;
+
+      return maxStreak;
     }
 
     function pct(n, d) {
